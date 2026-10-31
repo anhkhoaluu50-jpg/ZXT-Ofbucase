@@ -6,36 +6,23 @@ import os
 app = Flask(__name__)
 
 def xor_encrypt(data, key):
-    """Mã hóa XOR dữ liệu với key."""
     return bytes([b ^ key for b in data])
 
 def build_standalone_loader(lua_code):
-    """Tạo Loadstring độc lập, chạy vĩnh viễn không cần web."""
-    # Tạo key ngẫu nhiên từ 1 đến 255
     key = secrets.randbelow(254) + 1
-    
-    # 1. Base64 lớp 1
     encoded_bytes = base64.b64encode(lua_code.encode('utf-8'))
-    
-    # 2. Mã hóa XOR
     xored_bytes = xor_encrypt(encoded_bytes, key)
-    
-    # 3. Base64 lớp 2
     final_b64 = base64.b64encode(xored_bytes).decode('utf-8')
     
-    # 4. Chia nhỏ chuỗi để tránh lỗi giới hạn độ dài của Lua
     chunks = [final_b64[i:i+150] for i in range(0, len(final_b64), 150)]
     
-    # 5. Tạo mã Lua Loader
     parts = []
-    parts.append("-- ANHKHOA OFFLINE LOADER v5.0")
+    parts.append("-- ANHKHOA OFFLINE LOADER")
     parts.append("local _c={}")
     for c in chunks:
         parts.append("_c[#_c+1]='%s'" % c)
     parts.append("local _d=table.concat(_c)")
     parts.append("_c=nil")
-    
-    # Hàm decode Base64
     parts.append("local _b='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'")
     parts.append("local function _dec(s)")
     parts.append("s=string.gsub(s,'[^'.._b..'=]','')")
@@ -51,15 +38,11 @@ def build_standalone_loader(lua_code):
     parts.append("return string.char(c)")
     parts.append("end))")
     parts.append("end")
-    
-    # Hàm XOR
     parts.append("local function _xor(s,k)")
     parts.append("local r=''")
     parts.append("for i=1,#s do r=r..string.char(bit32.bxor(string.byte(s,i),k)) end")
     parts.append("return r")
     parts.append("end")
-    
-    # Giải mã và chạy
     parts.append("local _raw=_dec(_d)")
     parts.append("_d=nil")
     parts.append("local _code=_xor(_raw, %d)" % key)
@@ -72,21 +55,20 @@ def build_standalone_loader(lua_code):
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    try:
+        return render_template("index.html")
+    except Exception as e:
+        return f"<h1>Lỗi: Không tìm thấy file templates/index.html</h1><p>{str(e)}</p>"
 
 @app.route("/api/encode", methods=["POST"])
 def api_encode():
     try:
         data = request.get_json()
         code = data.get("code", "").strip()
-
         if not code:
             return jsonify({"ok": False, "error": "Nhap code Lua!"})
-        if len(code) > 1000000:
-            return jsonify({"ok": False, "error": "Code qua lon (toi da 1MB)."})
-
+        
         standalone_code = build_standalone_loader(code)
-
         return jsonify({
             "ok": True,
             "standalone_code": standalone_code,
@@ -98,4 +80,4 @@ def api_encode():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host="0.0.0.0", port=port)
